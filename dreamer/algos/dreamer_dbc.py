@@ -15,7 +15,7 @@ import torch.nn.functional as F
 
 
 class DreamerDBC(Dreamer):
-    def __init__(self, bisim_coef: float = 1.0, **kwargs):
+    def __init__(self, bisim_coef: float = 0.1, **kwargs):
         super().__init__(**kwargs)
         self.bisim_coef = bisim_coef
 
@@ -114,7 +114,7 @@ class DreamerDBC(Dreamer):
         # Bisim Loss
 
         bisim_loss = self.compute_bisim_loss(
-            observation=observation, action=action)
+            observation=observation, action=action, reward=reward)
 
         # Bisimulation Loss
 
@@ -191,10 +191,11 @@ class DreamerDBC(Dreamer):
 
         return (model_loss + bisim_loss), actor_loss, value_loss, loss_info
 
-    def compute_bisim_loss(self, observation, action):
+    def compute_bisim_loss(self, observation, action, reward):
         """
         observation: torch.Tensor B x T x C x H x W
         action: torch.Tensor B x A
+        reward: torch.Tensor B x A
         """
         model = self.agent.model
         observation = torch.cat(tuple(observation), dim=0)
@@ -206,15 +207,15 @@ class DreamerDBC(Dreamer):
         # Turn into RSSMState for transition model
         state1 = model.get_state_representation(observation)
         with torch.no_grad():
-            reward1 = model.reward_model(get_feat(state1)).rsample()
-            action, _ = model.policy(state1)
+            # action, _ = model.policy(state1)
             next_state1 = model.transition(action, state1)
-        reward2 = reward1[perm]
+            next_state2 = next_state1[perm]
+        reward2 = reward[perm]
         state2 = state1[perm]
-        next_state2 = next_state1[perm]
 
-        z_dist = F.smooth_l1_loss(state1.stoch, state2.stoch, reduction='none')
-        r_dist = F.smooth_l1_loss(reward1, reward2, reduction='none')
+        z_dist = F.smooth_l1_loss(
+            get_feat(state1), get_feat(state2), reduction='none')
+        r_dist = F.smooth_l1_loss(reward, reward2, reduction='none')
         transition_dist = torch.sqrt(
             (next_state1.mean - next_state2.mean).pow(2) +
             (next_state1.std - next_state2.std).pow(2) + 1e-8)
