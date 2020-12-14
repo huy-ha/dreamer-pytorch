@@ -15,8 +15,7 @@ import torch.nn.functional as F
 
 
 class DreamerDBC(Dreamer):
-    # TODO remove all decoding and reconstruction
-    def __init__(self, bisim_coef: float = 0.5, **kwargs):
+    def __init__(self, bisim_coef: float = 50.0, **kwargs):
         super().__init__(**kwargs)
         self.bisim_coef = bisim_coef
 
@@ -232,8 +231,9 @@ class DreamerDBC(Dreamer):
         return loss
 
     def write_videos(self, observation, step=None, n=4):
-        ground_truth = observation[:, :n] + 0.5
+        video = torch.clamp(observation[:, :n] + 0.5, 0., 1.).transpose(1, 0)
         writer: SummaryWriter = logger.get_tf_summary_writer()
         writer.add_video(tag='videos/ground_truth',
-                         vid_tensor=torch.clamp(ground_truth, 0., 1.),
-                         global_step=step, fps=20)
+                         vid_tensor=video,
+                         global_step=step,
+                         fps=20)
