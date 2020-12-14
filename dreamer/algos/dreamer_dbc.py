@@ -206,17 +206,15 @@ class DreamerDBC(Dreamer):
         # Turn into RSSMState for transition model
         state1 = model.get_state_representation(observation)
         with torch.no_grad():
-            reward1 = model.reward_model(get_feat(state1))
+            reward1 = model.reward_model(get_feat(state1)).rsample()
             action, _ = model.policy(state1)
             next_state1 = model.transition(action, state1)
-        reward2_mean = reward1.mean[perm]
-        # reward2_variance = reward1.variance[perm]  # TODO probabilistic rewards model difference?
+        reward2 = reward1[perm]
         state2 = state1[perm]
         next_state2 = next_state1[perm]
 
         z_dist = F.smooth_l1_loss(state1.stoch, state2.stoch, reduction='none')
-        r_dist = F.smooth_l1_loss(
-            reward1.mean, reward2_mean, reduction='none')
+        r_dist = F.smooth_l1_loss(reward1, reward2, reduction='none')
         transition_dist = torch.sqrt(
             (next_state1.mean - next_state2.mean).pow(2) +
             (next_state1.std - next_state2.std).pow(2) + 1e-8)
