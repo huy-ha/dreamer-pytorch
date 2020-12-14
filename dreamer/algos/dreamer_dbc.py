@@ -15,7 +15,7 @@ import torch.nn.functional as F
 
 
 class DreamerDBC(Dreamer):
-    def __init__(self, bisim_coef: float = 50.0, **kwargs):
+    def __init__(self, bisim_coef: float = 1.0, **kwargs):
         super().__init__(**kwargs)
         self.bisim_coef = bisim_coef
 
@@ -203,20 +203,17 @@ class DreamerDBC(Dreamer):
         # Sample random states across episodes at random
         batch_size = observation.size(0)
         perm = np.random.permutation(batch_size)
-
+        # Turn into RSSMState for transition model
+        state1 = model.get_state_representation(observation)
         with torch.no_grad():
-            # Turn into RSSMState for transition model
-            state1 = model.get_state_representation(observation)
-            # TODO maybe uncomment out next line?
-            # action, _ = model.policy(state)
             reward1 = model.reward_model(get_feat(state1))
+            action, _ = model.policy(state1)
             next_state1 = model.transition(action, state1)
         reward2_mean = reward1.mean[perm]
         # reward2_variance = reward1.variance[perm]  # TODO probabilistic rewards model difference?
         state2 = state1[perm]
         next_state2 = next_state1[perm]
 
-        # z_dist = F.smooth_l1_loss(h, h2, reduction='none')
         z_dist = torch.sqrt(
             (state1.mean - state2.mean).pow(2) +
             (state1.std - state2.std).pow(2))
