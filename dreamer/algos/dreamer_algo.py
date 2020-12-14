@@ -15,11 +15,28 @@ from dreamer.utils.module import get_parameters, FreezeParameters
 
 torch.autograd.set_detect_anomaly(True)  # used for debugging gradients
 
-loss_info_fields = ['model_loss', 'actor_loss', 'value_loss', 'prior_entropy', 'post_entropy', 'divergence',
-                    'reward_loss', 'image_loss', 'pcont_loss']
+# loss_info_fields = ['model_loss', 'actor_loss', 'value_loss', 'prior_entropy', 'post_entropy', 'divergence',
+#                     'reward_loss', 'image_loss', 'pcont_loss']
+# LossInfo = namedarraytuple('LossInfo', loss_info_fields)
+# OptInfo = namedarraytuple("OptInfo",
+#                           ['loss', 'grad_norm_model', 'grad_norm_actor', 'grad_norm_value'] + loss_info_fields)
+
+
+loss_info_fields = ['model_loss',
+                    'actor_loss',
+                    'value_loss',
+                    'prior_entropy',
+                    'post_entropy',
+                    'divergence',
+                    'reward_loss',
+                    'bisim_loss',
+                    'pcont_loss']
 LossInfo = namedarraytuple('LossInfo', loss_info_fields)
 OptInfo = namedarraytuple("OptInfo",
-                          ['loss', 'grad_norm_model', 'grad_norm_actor', 'grad_norm_value'] + loss_info_fields)
+                          ['loss',
+                           'grad_norm_model',
+                           'grad_norm_actor',
+                           'grad_norm_value'] + loss_info_fields)
 
 
 class Dreamer(RlAlgorithm):
@@ -79,7 +96,8 @@ class Dreamer(RlAlgorithm):
         self.n_itr = n_itr
         self.batch_spec = batch_spec
         self.mid_batch_reset = mid_batch_reset
-        self.replay_buffer = initialize_replay_buffer(self, examples, batch_spec)
+        self.replay_buffer = initialize_replay_buffer(
+            self, examples, batch_spec)
         self.optim_initialize(rank)
 
     def async_initialize(self, agent, sampler_n_itr, batch_spec, mid_batch_reset, examples, world_size=1):
@@ -87,7 +105,8 @@ class Dreamer(RlAlgorithm):
         self.n_itr = sampler_n_itr
         self.batch_spec = batch_spec
         self.mid_batch_reset = mid_batch_reset
-        self.replay_buffer = initialize_replay_buffer(self, examples, batch_spec, async_=True)
+        self.replay_buffer = initialize_replay_buffer(
+            self, examples, batch_spec, async_=True)
 
     def optim_initialize(self, rank=0):
         self.rank = rank
@@ -125,9 +144,12 @@ class Dreamer(RlAlgorithm):
     def load_optim_state_dict(self, state_dict):
         """Load an optimizer state dict; should expect the format returned
         from ``optim_state_dict().``"""
-        self.model_optimizer.load_state_dict(state_dict['model_optimizer_dict'])
-        self.actor_optimizer.load_state_dict(state_dict['actor_optimizer_dict'])
-        self.value_optimizer.load_state_dict(state_dict['value_optimizer_dict'])
+        self.model_optimizer.load_state_dict(
+            state_dict['model_optimizer_dict'])
+        self.actor_optimizer.load_state_dict(
+            state_dict['actor_optimizer_dict'])
+        self.value_optimizer.load_state_dict(
+            state_dict['value_optimizer_dict'])
 
     def optimize_agent(self, itr, samples=None, sampler_itr=None):
         itr = itr if sampler_itr is None else sampler_itr
@@ -142,9 +164,11 @@ class Dreamer(RlAlgorithm):
             return opt_info
         for i in tqdm(range(self.train_steps), desc='Imagination'):
 
-            samples_from_replay = self.replay_buffer.sample_batch(self._batch_size, self.batch_length)
+            samples_from_replay = self.replay_buffer.sample_batch(
+                self._batch_size, self.batch_length)
             buffed_samples = buffer_to(samples_from_replay, self.agent.device)
-            model_loss, actor_loss, value_loss, loss_info = self.loss(buffed_samples, itr, i)
+            model_loss, actor_loss, value_loss, loss_info = self.loss(
+                buffed_samples, itr, i)
 
             self.model_optimizer.zero_grad()
             self.actor_optimizer.zero_grad()
@@ -154,9 +178,12 @@ class Dreamer(RlAlgorithm):
             actor_loss.backward()
             value_loss.backward()
 
-            grad_norm_model = torch.nn.utils.clip_grad_norm_(get_parameters(self.model_modules), self.grad_clip)
-            grad_norm_actor = torch.nn.utils.clip_grad_norm_(get_parameters(self.actor_modules), self.grad_clip)
-            grad_norm_value = torch.nn.utils.clip_grad_norm_(get_parameters(self.value_modules), self.grad_clip)
+            grad_norm_model = torch.nn.utils.clip_grad_norm_(
+                get_parameters(self.model_modules), self.grad_clip)
+            grad_norm_actor = torch.nn.utils.clip_grad_norm_(
+                get_parameters(self.actor_modules), self.grad_clip)
+            grad_norm_value = torch.nn.utils.clip_grad_norm_(
+                get_parameters(self.value_modules), self.grad_clip)
 
             self.model_optimizer.step()
             self.actor_optimizer.step()
@@ -175,7 +202,8 @@ class Dreamer(RlAlgorithm):
                 opt_info.grad_norm_value.append(grad_norm_value)
             for field in loss_info_fields:
                 if hasattr(opt_info, field):
-                    getattr(opt_info, field).append(getattr(loss_info, field).item())
+                    getattr(opt_info, field).append(
+                        getattr(loss_info, field).item())
 
         return opt_info
 
@@ -191,9 +219,12 @@ class Dreamer(RlAlgorithm):
         """
         model = self.agent.model
 
-        observation = samples.all_observation[:-1]  # [t, t+batch_length+1] -> [t, t+batch_length]
-        action = samples.all_action[1:]  # [t-1, t+batch_length] -> [t, t+batch_length]
-        reward = samples.all_reward[1:]  # [t-1, t+batch_length] -> [t, t+batch_length]
+        # [t, t+batch_length+1] -> [t, t+batch_length]
+        observation = samples.all_observation[:-1]
+        # [t-1, t+batch_length] -> [t, t+batch_length]
+        action = samples.all_action[1:]
+        # [t-1, t+batch_length] -> [t, t+batch_length]
+        reward = samples.all_reward[1:]
         reward = reward.unsqueeze(2)
         done = samples.done
         done = done.unsqueeze(2)
@@ -202,7 +233,8 @@ class Dreamer(RlAlgorithm):
         # They all have the batch_t dimension first, but we'll put the batch_b dimension first.
         # Also, we convert all tensors to floats so they can be fed into our models.
 
-        lead_dim, batch_t, batch_b, img_shape = infer_leading_dims(observation, 3)
+        lead_dim, batch_t, batch_b, img_shape = infer_leading_dims(
+            observation, 3)
         # squeeze batch sizes to single batch dimension for imagination roll-out
         batch_size = batch_t * batch_b
 
@@ -211,9 +243,11 @@ class Dreamer(RlAlgorithm):
         # embed the image
         embed = model.observation_encoder(observation)
 
-        prev_state = model.representation.initial_state(batch_b, device=action.device, dtype=action.dtype)
+        prev_state = model.representation.initial_state(
+            batch_b, device=action.device, dtype=action.dtype)
         # Rollout model by taking the same series of actions as the real model
-        prior, post = model.rollout.rollout_representation(batch_t, embed, action, prev_state)
+        prior, post = model.rollout.rollout_representation(
+            batch_t, embed, action, prev_state)
         # Flatten our data (so first dimension is batch_t * batch_b = batch_size)
         # since we're going to do a new rollout starting from each state visited in each batch.
 
@@ -232,7 +266,8 @@ class Dreamer(RlAlgorithm):
             pcont_loss = -torch.mean(pcont_pred.log_prob(pcont_target))
         prior_dist = get_dist(prior)
         post_dist = get_dist(post)
-        div = torch.mean(torch.distributions.kl.kl_divergence(post_dist, prior_dist))
+        div = torch.mean(
+            torch.distributions.kl.kl_divergence(post_dist, prior_dist))
         div = torch.max(div, div.new_full(div.size(), self.free_nats))
         model_loss = self.kl_scale * div + reward_loss + image_loss
         if self.use_pcont:
@@ -246,16 +281,19 @@ class Dreamer(RlAlgorithm):
         with torch.no_grad():
             if self.use_pcont:
                 # "Last step could be terminal." Done in TF2 code, but unclear why
-                flat_post = buffer_method(post[:-1, :], 'reshape', (batch_t - 1) * (batch_b), -1)
+                flat_post = buffer_method(
+                    post[:-1, :], 'reshape', (batch_t - 1) * (batch_b), -1)
             else:
                 flat_post = buffer_method(post, 'reshape', batch_size, -1)
         # Rollout the policy for self.horizon steps. Variable names with imag_ indicate this data is imagined not real.
         # imag_feat shape is [horizon, batch_t * batch_b, feature_size]
         with FreezeParameters(self.model_modules):
-            imag_dist, _ = model.rollout.rollout_policy(self.horizon, model.policy, flat_post)
+            imag_dist, _ = model.rollout.rollout_policy(
+                self.horizon, model.policy, flat_post)
 
         # Use state features (deterministic and stochastic) to predict the image and reward
-        imag_feat = get_feat(imag_dist)  # [horizon, batch_t * batch_b, feature_size]
+        # [horizon, batch_t * batch_b, feature_size]
+        imag_feat = get_feat(imag_dist)
         # Assumes these are normal distributions. In the TF code it's be mode, but for a normal distribution mean = mode
         # If we want to use other distributions we'll have to fix this.
         # We calculate the target here so no grad necessary
@@ -273,7 +311,8 @@ class Dreamer(RlAlgorithm):
         returns = self.compute_return(imag_reward[:-1], value[:-1], discount_arr[:-1],
                                       bootstrap=value[-1], lambda_=self.discount_lambda)
         # Make the top row 1 so the cumulative product starts with discount^0
-        discount_arr = torch.cat([torch.ones_like(discount_arr[:1]), discount_arr[1:]])
+        discount_arr = torch.cat(
+            [torch.ones_like(discount_arr[:1]), discount_arr[1:]])
         discount = torch.cumprod(discount_arr[:-1], 0)
         actor_loss = -torch.mean(discount * returns)
 
@@ -313,13 +352,15 @@ class Dreamer(RlAlgorithm):
         Then for time steps t+1:T, uses the state transition model.
         Outputs 3 different frames to video: ground truth, reconstruction, error
         """
-        lead_dim, batch_t, batch_b, img_shape = infer_leading_dims(observation, 3)
+        lead_dim, batch_t, batch_b, img_shape = infer_leading_dims(
+            observation, 3)
         model = self.agent.model
         ground_truth = observation[:, :n] + 0.5
         reconstruction = image_pred.mean[:t, :n]
 
         prev_state = post[t - 1, :n]
-        prior = model.rollout.rollout_transition(batch_t - t, action[t:, :n], prev_state)
+        prior = model.rollout.rollout_transition(
+            batch_t - t, action[t:, :n], prev_state)
         imagined = model.observation_decoder(get_feat(prior)).mean
         model = torch.cat((reconstruction, imagined), dim=0) + 0.5
         error = (model - ground_truth + 1) / 2

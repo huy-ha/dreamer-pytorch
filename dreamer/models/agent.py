@@ -38,27 +38,35 @@ class AgentModel(nn.Module):
         self.observation_encoder = ObservationEncoder(shape=image_shape)
         encoder_embed_size = self.observation_encoder.embed_size
         decoder_embed_size = stochastic_size + deterministic_size
-        self.observation_decoder = ObservationDecoder(embed_size=decoder_embed_size, shape=image_shape)
+        self.observation_decoder = ObservationDecoder(
+            embed_size=decoder_embed_size, shape=image_shape)
         self.action_shape = action_shape
         output_size = np.prod(action_shape)
-        self.transition = RSSMTransition(output_size, stochastic_size, deterministic_size, hidden_size)
-        self.representation = RSSMRepresentation(self.transition, encoder_embed_size, output_size, stochastic_size,
-                                                 deterministic_size, hidden_size)
+        self.transition = RSSMTransition(
+            output_size, stochastic_size, deterministic_size, hidden_size)
+        self.representation = RSSMRepresentation(
+            self.transition, encoder_embed_size, output_size, stochastic_size,
+            deterministic_size, hidden_size)
         self.rollout = RSSMRollout(self.representation, self.transition)
         feature_size = stochastic_size + deterministic_size
         self.action_size = output_size
         self.action_dist = action_dist
-        self.action_decoder = ActionDecoder(output_size, feature_size, action_hidden_size, action_layers, action_dist)
-        self.reward_model = DenseModel(feature_size, reward_shape, reward_layers, reward_hidden)
-        self.value_model = DenseModel(feature_size, value_shape, value_layers, value_hidden)
+        self.action_decoder = ActionDecoder(
+            output_size, feature_size, action_hidden_size, action_layers, action_dist)
+        self.reward_model = DenseModel(
+            feature_size, reward_shape, reward_layers, reward_hidden)
+        self.value_model = DenseModel(
+            feature_size, value_shape, value_layers, value_hidden)
         self.dtype = dtype
         self.stochastic_size = stochastic_size
         self.deterministic_size = deterministic_size
         if use_pcont:
-            self.pcont = DenseModel(feature_size, (1,), pcont_layers, pcont_hidden, dist='binary')
+            self.pcont = DenseModel(
+                feature_size, (1,), pcont_layers, pcont_hidden, dist='binary')
 
     def forward(self, observation: torch.Tensor, prev_action: torch.Tensor = None, prev_state: RSSMState = None):
-        state = self.get_state_representation(observation, prev_action, prev_state)
+        state = self.get_state_representation(
+            observation, prev_action, prev_state)
         action, action_dist = self.policy(state)
         value = self.value_model(get_feat(state))
         reward = self.reward_model(get_feat(state))
@@ -119,16 +127,19 @@ class AgentModel(nn.Module):
 class AtariDreamerModel(AgentModel):
     def forward(self, observation: torch.Tensor, prev_action: torch.Tensor = None, prev_state: RSSMState = None):
         lead_dim, T, B, img_shape = infer_leading_dims(observation, 3)
-        observation = observation.reshape(T * B, *img_shape).type(self.dtype) / 255.0 - 0.5
+        observation = observation.reshape(
+            T * B, *img_shape).type(self.dtype) / 255.0 - 0.5
         prev_action = prev_action.reshape(T * B, -1).to(self.dtype)
         if prev_state is None:
             prev_state = self.representation.initial_state(prev_action.size(0), device=prev_action.device,
                                                            dtype=self.dtype)
-        state = self.get_state_representation(observation, prev_action, prev_state)
+        state = self.get_state_representation(
+            observation, prev_action, prev_state)
 
         action, action_dist = self.policy(state)
         return_spec = ModelReturnSpec(action, state)
-        return_spec = buffer_func(return_spec, restore_leading_dims, lead_dim, T, B)
+        return_spec = buffer_func(
+            return_spec, restore_leading_dims, lead_dim, T, B)
         return return_spec
 
 
