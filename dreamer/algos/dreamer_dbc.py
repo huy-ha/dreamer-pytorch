@@ -214,14 +214,12 @@ class DreamerDBC(Dreamer):
         state2 = state1[perm]
         next_state2 = next_state1[perm]
 
-        z_dist = torch.sqrt(
-            (state1.mean - state2.mean).pow(2) +
-            (state1.std - state2.std).pow(2))
+        z_dist = F.smooth_l1_loss(state1.stoch, state2.stoch, reduction='none')
         r_dist = F.smooth_l1_loss(
             reward1.mean, reward2_mean, reduction='none')
         transition_dist = torch.sqrt(
             (next_state1.mean - next_state2.mean).pow(2) +
-            (next_state1.std - next_state2.std).pow(2))
+            (next_state1.std - next_state2.std).pow(2) + 1e-8)
 
         bisimilarity = r_dist + self.discount * transition_dist
         loss = (z_dist - bisimilarity).pow(2).mean()
