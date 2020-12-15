@@ -202,31 +202,25 @@ class DreamerDBC(Dreamer):
         action = torch.cat(tuple(action), dim=0)
         reward = torch.cat(tuple(reward), dim=0)
 
-        # Sample random states across episodes at random
         batch_size = observation.size(0)
 
         perm = np.random.permutation(batch_size)
-        # Turn into RSSMState for transition model
-        state1 = model.get_state_representation(observation)
+        state = model.get_state_representation(observation)
 
         with torch.no_grad():
-            # action, _ = model.policy(state1)
-            next_state1 = model.transition(action, state1)
-        reward2 = reward[perm]
-        state1 = get_feat(state1)
-        state2 = state1[perm]
-
+            action, _ = model.policy(state)
+            next_state = model.transition(action, state)
+        state = get_feat(state)
         z_dist = F.smooth_l1_loss(
-            state1, state2, reduction='none')
-        r_dist = F.smooth_l1_loss(reward, reward2, reduction='none')
-        next_state1 = get_feat(next_state1)
-        next_state2 = next_state1[perm]
-        # transition_dist = torch.sqrt(
-        #     (next_state1.mean - next_state2.mean).pow(2) +
-        #     (next_state1.std - next_state2.std).pow(2) + 1e-8)
-        transition_dist = F.smooth_l1_loss(
-            next_state1, next_state1, reduction='none')
-
+            state, state[perm], reduction='none')
+        r_dist = F.smooth_l1_loss(reward, reward[perm], reduction='none')
+        transition_dist_deter = F.smooth_l1_loss(
+            next_state.deter, next_state.deter[perm], reduction='none')
+        transition_dist_stoch = torch.sqrt(
+            (next_state.mean - next_state.mean[perm]).pow(2) +
+            (next_state.std - next_state.std[perm]).pow(2) + 1e-8)
+        transition_dist = torch.cat(
+            (transition_dist_stoch, transition_dist_deter), dim=-1)
         bisimilarity = r_dist + self.discount * transition_dist
         loss = (z_dist - bisimilarity).pow(2).mean()
         return loss

@@ -18,7 +18,7 @@ from dreamer.envs.normalize_actions import NormalizeActions
 from dreamer.envs.wrapper import make_wapper
 
 
-def build_and_train(log_dir, game="cartpole_balance", run_ID=0, cuda_idx=None, eval=False, save_model='last', load_model_path=None):
+def build_and_train(log_dir, game, run_ID=0, cuda_idx=None, eval=False, save_model='last', load_model_path=None):
     params = torch.load(load_model_path) if load_model_path else {}
     agent_state_dict = params.get('agent_state_dict')
     optimizer_state_dict = params.get('optimizer_state_dict')
@@ -65,7 +65,13 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--game',
                         help='DMC game',
-                        default='walker_run')
+                        default='cheetah_run',
+                        choices=[
+                            'cartpole_balance',
+                            'walker_run',
+                            'walker_walk',
+                            'cheetah_run',
+                        ])
     parser.add_argument('--run-ID',
                         help='run identifier (logging)',
                         type=int,
@@ -87,8 +93,7 @@ if __name__ == "__main__":
                         type=str)
     default_log_dir = os.path.join(
         os.path.dirname(__file__),
-        'data',
-        'local',
+        'logs',
         datetime.datetime.now().strftime("%Y%m%d"))
     parser.add_argument('--log-dir', type=str, default=default_log_dir)
     args = parser.parse_args()
