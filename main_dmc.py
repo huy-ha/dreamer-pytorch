@@ -65,12 +65,18 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--game',
                         help='DMC game',
-                        default='cheetah_run',
+                        default='cartpole_balance',
                         choices=[
                             'cartpole_balance',
                             'walker_run',
                             'walker_walk',
                             'cheetah_run',
+                            'acrobot_swingup',
+                            'hopper_hop',
+                            'hopper_stand',
+                            'pendulum_swingup',
+                            'quadruped_walk',
+                            'walker_stand'
                         ])
     parser.add_argument('--run-ID',
                         help='run identifier (logging)',
@@ -79,7 +85,7 @@ if __name__ == "__main__":
     parser.add_argument('--cuda-idx',
                         help='gpu to use ',
                         type=int,
-                        default=0)
+                        default=None)
     parser.add_argument('--eval',
                         action='store_true')
     parser.add_argument('--save-model',
