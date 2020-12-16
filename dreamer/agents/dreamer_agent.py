@@ -71,6 +71,7 @@ class DreamerAgent(RecurrentAgentMixin, BaseAgent):
             expl_amount = self.train_noise
             if self.expl_decay:  # Linear decay
                 expl_amount = expl_amount - self._itr / self.expl_decay
+                self._itr += 1
             if self.expl_min:
                 expl_amount = max(self.expl_min, expl_amount)
         elif self._mode == 'eval':
