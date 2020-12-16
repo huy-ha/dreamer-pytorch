@@ -15,24 +15,41 @@ from dreamer.envs.dmc import DeepMindControl
 from dreamer.envs.time_limit import TimeLimit
 from dreamer.envs.action_repeat import ActionRepeat
 from dreamer.envs.normalize_actions import NormalizeActions
-from dreamer.envs.wrapper import make_wapper
+from dreamer.envs.wrapper import make_wapper, make_wapper_custom
+from copy import deepcopy
+import dmc2gym
 
 
-def build_and_train(log_dir, game, run_ID=0, cuda_idx=None, eval=False, save_model='last', load_model_path=None):
+def build_and_train(log_dir, run_ID=0, cuda_idx=None, eval=False,
+                    load_model_path=None, args=None, action_repeat=2):
     params = torch.load(load_model_path) if load_model_path else {}
     agent_state_dict = params.get('agent_state_dict')
     optimizer_state_dict = params.get('optimizer_state_dict')
 
-    action_repeat = 2
-    factory_method = make_wapper(
-        DeepMindControl,
-        [ActionRepeat, NormalizeActions, TimeLimit],
-        [dict(amount=action_repeat), dict(), dict(duration=1000 / action_repeat)])
+    factory_method = make_wapper_custom(
+        wrapper_classes=[ActionRepeat, NormalizeActions, TimeLimit],
+        wrapper_kwargs=[dict(amount=action_repeat), dict(), dict(duration=1000 / action_repeat)])
+    env_kwargs = dict(
+        domain_name=args.domain_name,
+        task_name=args.task_name,
+        resource_files=args.resource_files,
+        img_source=args.img_source,
+        total_frames=args.total_frames,
+        seed=args.seed,  # TODO seed other parts
+        visualize_reward=False,
+        from_pixels=True,
+        height=args.image_size,
+        width=args.image_size,
+        frame_skip=action_repeat)
+    eval_env_kwargs = deepcopy(env_kwargs)
+    eval_env_kwargs.update({
+        "resource_files": args.eval_resource_files
+    })
     sampler = SerialSampler(
         EnvCls=factory_method,
         TrajInfoCls=TrajInfo,
-        env_kwargs=dict(name=game),
-        eval_env_kwargs=dict(name=game),
+        env_kwargs=env_kwargs,
+        eval_env_kwargs=eval_env_kwargs,
         batch_T=1,
         batch_B=1,
         max_decorrelation_steps=0,
@@ -40,44 +57,56 @@ def build_and_train(log_dir, game, run_ID=0, cuda_idx=None, eval=False, save_mod
         eval_max_steps=int(10e3),
         eval_max_trajectories=5,
     )
+
     # Run with defaults.
-    algo = DreamerDBC(initial_optim_state_dict=optimizer_state_dict)
-    agent = DMCDreamerAgent(train_noise=0.3, eval_noise=0, expl_type="additive_gaussian",
-                            expl_min=None, expl_decay=None, initial_model_state_dict=agent_state_dict)
+    algo = Dreamer(initial_optim_state_dict=optimizer_state_dict)\
+        if args.approach == 'dreamer' else \
+        DreamerDBC(
+        bisim_coef=args.bisim_coeff,
+        initial_optim_state_dict=optimizer_state_dict)
+    agent = DMCDreamerAgent(
+        train_noise=0.3,
+        eval_noise=0,
+        expl_type="additive_gaussian",
+        expl_min=None,
+        expl_decay=None,
+        initial_model_state_dict=agent_state_dict)
     runner_cls = MinibatchRlEval if eval else MinibatchRl
     runner = runner_cls(
         algo=algo,
         agent=agent,
         sampler=sampler,
+        seed=args.seed,
         n_steps=5e6,
         log_interval_steps=1e3,
         affinity=dict(cuda_idx=cuda_idx),
     )
+    game = f'{args.domain_name}_{args.task_name}'
     config = dict(game=game)
-    name = "dreamerdbc_" + game
-    with logger_context(log_dir, run_ID, name, config, snapshot_mode=save_model, override_prefix=True,
-                        use_summary_writer=True):
+    name = "dreamer_" + game
+    with logger_context(
+            log_dir, run_ID, name, config,
+            snapshot_mode='gap', override_prefix=True,
+            use_summary_writer=True):
         runner.train()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--game',
-                        help='DMC game',
-                        default='cartpole_balance',
-                        choices=[
-                            'cartpole_balance',
-                            'walker_run',
-                            'walker_walk',
-                            'cheetah_run',
-                            'acrobot_swingup',
-                            'hopper_hop',
-                            'hopper_stand',
-                            'pendulum_swingup',
-                            'quadruped_walk',
-                            'walker_stand'
-                        ])
+    parser.add_argument('--approach',
+                        default='ours',
+                        choices=['ours', 'dreamer'])
+    parser.add_argument('--domain_name', default='cartpole')
+    parser.add_argument('--task_name', default='balance')
+    parser.add_argument('--seed', default=0, type=int)
+    parser.add_argument('--image_size', default=64, type=int)
+    parser.add_argument('--resource_files', type=str, required=True)
+    parser.add_argument('--eval_resource_files', type=str, required=True)
+    parser.add_argument('--img_source', default='video', type=str,
+                        choices=['color', 'noise', 'images', 'video', 'none'])
+    parser.add_argument('--bisim_coeff', default=1.0, type=float)
+    parser.add_argument('--total_frames', default=25000, type=int)
     parser.add_argument('--run-ID',
                         help='run identifier (logging)',
                         type=int,
@@ -86,13 +115,7 @@ if __name__ == "__main__":
                         help='gpu to use ',
                         type=int,
                         default=None)
-    parser.add_argument('--eval',
-                        action='store_true')
-    parser.add_argument('--save-model',
-                        help='save model',
-                        type=str,
-                        default='gap',
-                        choices=['all', 'none', 'gap', 'last'])
+    parser.add_argument('--eval', action='store_true')
     # path to params.pkl
     parser.add_argument('--load-model-path',
                         help='load model from path',
@@ -112,10 +135,8 @@ if __name__ == "__main__":
     args.run_ID = i
     build_and_train(
         log_dir,
-        game=args.game,
         run_ID=args.run_ID,
         cuda_idx=args.cuda_idx,
         eval=args.eval,
-        save_model=args.save_model,
         load_model_path=args.load_model_path,
-    )
+        args=args)

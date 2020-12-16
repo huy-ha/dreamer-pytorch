@@ -195,7 +195,8 @@ class Dreamer(RlAlgorithm):
                 opt_info.grad_norm_actor.append(grad_norm_actor)
                 opt_info.grad_norm_value.append(grad_norm_value)
             for field in loss_info_fields:
-                if hasattr(opt_info, field):
+                if hasattr(opt_info, field) \
+                        and getattr(loss_info, field) is not None:
                     getattr(opt_info, field).append(
                         getattr(loss_info, field).item())
 
@@ -330,7 +331,7 @@ class Dreamer(RlAlgorithm):
             post_ent = torch.mean(post_dist.entropy())
             loss_info = LossInfo(
                 model_loss, actor_loss, value_loss, prior_ent, post_ent,
-                div, reward_loss, image_loss, 0.0, pcont_loss)
+                div, reward_loss, image_loss, None, pcont_loss)
 
             if self.log_video:
                 if opt_itr == self.train_steps - 1 and sample_itr % self.video_every == 0:
