@@ -15,18 +15,17 @@ import torch.nn.functional as F
 
 
 class DreamerDBC(Dreamer):
-    def __init__(self, bisim_coef: float = 0.1, **kwargs):
+    def __init__(self, bisim_coef: float = 1.0, **kwargs):
         super().__init__(**kwargs)
         self.bisim_coef = bisim_coef
 
     def optim_initialize(self, rank=0):
-        # TODO might still want to split encoder optimizer and models optimizer
         self.rank = rank
         model = self.agent.model
         self.model_modules = [
             model.observation_encoder,
             model.reward_model,
-            model.representation,  # TODO what does this do??
+            model.representation,
             model.transition]
         if self.use_pcont:
             self.model_modules += [model.pcont]
@@ -81,8 +80,7 @@ class DreamerDBC(Dreamer):
         # normalize image
         observation = observation.type(self.type) / 255.0 - 0.5
         # embed the image
-        embed = model.observation_encoder(
-            observation)  # TODO make this probabilistic
+        embed = model.observation_encoder(observation)
 
         prev_state = model.representation.initial_state(
             batch_b, device=action.device, dtype=action.dtype)
@@ -179,8 +177,9 @@ class DreamerDBC(Dreamer):
         with torch.no_grad():
             prior_ent = torch.mean(prior_dist.entropy())
             post_ent = torch.mean(post_dist.entropy())
-            loss_info = LossInfo(model_loss, actor_loss, value_loss, prior_ent, post_ent, div, reward_loss, bisim_loss,
-                                 pcont_loss)
+            loss_info = LossInfo(
+                model_loss, actor_loss, value_loss, prior_ent, post_ent,
+                div, reward_loss, None, bisim_loss, pcont_loss)
 
             if self.log_video:
                 if opt_itr == self.train_steps - 1 and sample_itr % self.video_every == 0:
@@ -189,7 +188,7 @@ class DreamerDBC(Dreamer):
                         step=sample_itr,
                         n=self.video_summary_b)
 
-        return (model_loss + bisim_loss), actor_loss, value_loss, loss_info
+        return (model_loss + self.bisim_coef * bisim_loss), actor_loss, value_loss, loss_info
 
     def compute_bisim_loss(self, observation, action, reward):
         """
@@ -208,19 +207,16 @@ class DreamerDBC(Dreamer):
         state = model.get_state_representation(observation)
 
         with torch.no_grad():
-            action, _ = model.policy(state)
+            # action, _ = model.policy(state)
             next_state = model.transition(action, state)
-        state = get_feat(state)
+            # reward_pred_dist = model.reward_model(get_feat(next_state))
+            # reward = reward_pred_dist.mean
         z_dist = F.smooth_l1_loss(
-            state, state[perm], reduction='none')
+            state.stoch, state.stoch[perm], reduction='none')
         r_dist = F.smooth_l1_loss(reward, reward[perm], reduction='none')
-        transition_dist_deter = F.smooth_l1_loss(
-            next_state.deter, next_state.deter[perm], reduction='none')
-        transition_dist_stoch = torch.sqrt(
+        transition_dist = torch.sqrt(
             (next_state.mean - next_state.mean[perm]).pow(2) +
             (next_state.std - next_state.std[perm]).pow(2) + 1e-8)
-        transition_dist = torch.cat(
-            (transition_dist_stoch, transition_dist_deter), dim=-1)
         bisimilarity = r_dist + self.discount * transition_dist
         loss = (z_dist - bisimilarity).pow(2).mean()
         return loss

@@ -7,19 +7,12 @@ from rlpyt.utils.collections import namedarraytuple
 from rlpyt.utils.quick_args import save__init__args
 from rlpyt.utils.tensor import infer_leading_dims
 from tqdm import tqdm
-
 from dreamer.algos.replay import initialize_replay_buffer, samples_to_buffer
 from dreamer.models.rnns import get_feat, get_dist
 from dreamer.utils.logging import video_summary
 from dreamer.utils.module import get_parameters, FreezeParameters
 
 torch.autograd.set_detect_anomaly(True)  # used for debugging gradients
-
-# loss_info_fields = ['model_loss', 'actor_loss', 'value_loss', 'prior_entropy', 'post_entropy', 'divergence',
-#                     'reward_loss', 'image_loss', 'pcont_loss']
-# LossInfo = namedarraytuple('LossInfo', loss_info_fields)
-# OptInfo = namedarraytuple("OptInfo",
-#                           ['loss', 'grad_norm_model', 'grad_norm_actor', 'grad_norm_value'] + loss_info_fields)
 
 
 loss_info_fields = ['model_loss',
@@ -29,6 +22,7 @@ loss_info_fields = ['model_loss',
                     'post_entropy',
                     'divergence',
                     'reward_loss',
+                    'image_loss',
                     'bisim_loss',
                     'pcont_loss']
 LossInfo = namedarraytuple('LossInfo', loss_info_fields)
@@ -334,8 +328,9 @@ class Dreamer(RlAlgorithm):
         with torch.no_grad():
             prior_ent = torch.mean(prior_dist.entropy())
             post_ent = torch.mean(post_dist.entropy())
-            loss_info = LossInfo(model_loss, actor_loss, value_loss, prior_ent, post_ent, div, reward_loss, image_loss,
-                                 pcont_loss)
+            loss_info = LossInfo(
+                model_loss, actor_loss, value_loss, prior_ent, post_ent,
+                div, reward_loss, image_loss, 0.0, pcont_loss)
 
             if self.log_video:
                 if opt_itr == self.train_steps - 1 and sample_itr % self.video_every == 0:

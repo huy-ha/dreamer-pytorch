@@ -1,6 +1,7 @@
 from typing import Sequence, Dict
 
 from rlpyt.envs.base import Env
+from dmc2gym import make as dmc2gym_make
 
 
 class EnvWrapper(Env):
@@ -10,7 +11,8 @@ class EnvWrapper(Env):
 
     def __getattr__(self, name):
         if name.startswith('_'):
-            raise AttributeError("attempted to get missing private attribute '{}'".format(name))
+            raise AttributeError(
+                "attempted to get missing private attribute '{}'".format(name))
         return getattr(self.env, name)
 
     def step(self, action):
@@ -61,6 +63,26 @@ def make_wapper(base_class, wrapper_classes: Sequence = None, wrapper_kwargs: Se
         def make_env(**env_kwargs):
             """:return the wrapped environment instance"""
             env = base_class(**env_kwargs)
+            for i, wrapper_cls in enumerate(wrapper_classes):
+                w_kwargs = wrapper_kwargs[i]
+                if w_kwargs is None:
+                    w_kwargs = dict()
+                env = wrapper_cls(env, **w_kwargs)
+            return env
+
+        return make_env
+
+
+def make_wapper_custom(wrapper_classes: Sequence = None, wrapper_kwargs: Sequence[Dict] = None):
+    if wrapper_classes is None:
+        def make_env(**env_kwargs):
+            return dmc2gym_make(**env_kwargs)
+        return make_env
+    else:
+        assert len(wrapper_classes) == len(wrapper_kwargs)
+
+        def make_env(**env_kwargs):
+            env = dmc2gym_make(**env_kwargs)
             for i, wrapper_cls in enumerate(wrapper_classes):
                 w_kwargs = wrapper_kwargs[i]
                 if w_kwargs is None:

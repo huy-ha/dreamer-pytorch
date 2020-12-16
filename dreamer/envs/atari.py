@@ -28,9 +28,11 @@ class AtariEnv(Env):
         self._noops = noops
         self._life_done = life_done
         self._lives = None
-        shape = self._env.observation_space.shape[:2] + (() if grayscale else (3,))
+        shape = self._env.observation_space.shape[:2] + \
+            (() if grayscale else (3,))
         self._buffers = [np.empty(shape, dtype=np.uint8) for _ in range(2)]
-        self.random = np.random.RandomState(seed=None)  # expose for one_hot wrapper
+        self.random = np.random.RandomState(
+            seed=None)  # expose for one_hot wrapper
 
     @property
     def observation_space(self):
@@ -81,7 +83,7 @@ class AtariEnv(Env):
                 else:
                     self._env.ale.getScreenRGB2(self._buffers[index])
         obs = self._get_obs()
-        env_info = EnvInfo(None, total_reward, done)
+        env_info = EnvInfo(None, total_reward, done, None)
         return EnvStep(obs, total_reward, done, env_info)
 
     def render(self, mode):
@@ -89,7 +91,8 @@ class AtariEnv(Env):
 
     def _get_obs(self):
         if self._action_repeat > 1:
-            np.maximum(self._buffers[0], self._buffers[1], out=self._buffers[0])
+            np.maximum(self._buffers[0],
+                       self._buffers[1], out=self._buffers[0])
         image = np.array(Image.fromarray(self._buffers[0]).resize(
             self._size, Image.BILINEAR))
         image = np.clip(image, 0, 255).astype(np.uint8)

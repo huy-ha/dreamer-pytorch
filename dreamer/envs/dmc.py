@@ -9,9 +9,6 @@ from rlpyt.spaces.float_box import FloatBox
 from dreamer.envs.env import EnvInfo
 
 
-# DMCInfo = namedarraytuple("DMCInfo", ["discount", 'traj_done'])
-
-
 class DeepMindControl(Env):
 
     def __init__(self, name, size=(64, 64), camera=None):
@@ -45,7 +42,12 @@ class DeepMindControl(Env):
         reward = time_step.reward or 0
         done = time_step.last()
 
-        info = EnvInfo(np.array(time_step.discount, np.float32), None, done)
+        info = EnvInfo(
+            np.array(time_step.discount, np.float32),
+            None,
+            done,
+            self._env.physics.get_state().copy()
+        )
         return EnvStep(obs, reward, done, info)
 
     def reset(self):
