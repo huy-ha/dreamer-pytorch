@@ -29,7 +29,8 @@ class DreamerAgent(RecurrentAgentMixin, BaseAgent):
         return dict(action_size=env_spaces.action.shape[0])
 
     def __call__(self, observation, prev_action, init_rnn_state):
-        model_inputs = buffer_to((observation, prev_action, init_rnn_state), device=self.device)
+        model_inputs = buffer_to(
+            (observation, prev_action, init_rnn_state), device=self.device)
         return self.model(*model_inputs)
 
     @torch.no_grad()
@@ -41,11 +42,13 @@ class DreamerAgent(RecurrentAgentMixin, BaseAgent):
         to CPU, for the sampler.  Advances the recurrent state of the agent.
         (no grad)
         """
-        model_inputs = buffer_to((observation, prev_action), device=self.device)
+        model_inputs = buffer_to(
+            (observation, prev_action), device=self.device)
         action, state = self.model(*model_inputs, self.prev_rnn_state)
         action = self.exploration(action)
         # Model handles None, but Buffer does not, make zeros if needed:
-        prev_state = self.prev_rnn_state or buffer_func(state, torch.zeros_like)
+        prev_state = self.prev_rnn_state or buffer_func(
+            state, torch.zeros_like)
         self.advance_rnn_state(state)
         agent_info = DreamerAgentInfo(prev_state=prev_state)
         agent_step = AgentStep(action=action, agent_info=agent_info)
@@ -58,8 +61,10 @@ class DreamerAgent(RecurrentAgentMixin, BaseAgent):
         currently held recurrent state, without advancing the recurrent state,
         e.g. for the bootstrap value V(s_{T+1}), in the sampler.  (no grad)
         """
-        agent_inputs = buffer_to((observation, prev_action), device=self.device)
-        action, action_dist, value, reward, state = self.model(*agent_inputs, self.prev_rnn_state)
+        agent_inputs = buffer_to(
+            (observation, prev_action), device=self.device)
+        action, action_dist, value, reward, state = self.model(
+            *agent_inputs, self.prev_rnn_state)
         return value.to("cpu")
 
     def exploration(self, action: torch.Tensor) -> torch.Tensor:
@@ -80,17 +85,20 @@ class DreamerAgent(RecurrentAgentMixin, BaseAgent):
             raise NotImplementedError
 
         if self.expl_type == 'additive_gaussian':  # For continuous actions
-            noise = torch.randn(*action.shape, device=action.device) * expl_amount
+            noise = torch.randn(
+                *action.shape, device=action.device) * expl_amount
             return torch.clamp(action + noise, -1, 1)
         if self.expl_type == 'completely_random':  # For continuous actions
             if expl_amount == 0:
                 return action
             else:
-                return torch.rand(*action.shape, device=action.device) * 2 - 1  # scale to [-1, 1]
+                # scale to [-1, 1]
+                return torch.rand(*action.shape, device=action.device) * 2 - 1
         if self.expl_type == 'epsilon_greedy':  # For discrete actions
             action_dim = self.env_model_kwargs["action_shape"][0]
             if np.random.uniform(0, 1) < expl_amount:
-                index = torch.randint(0, action_dim, action.shape[:-1], device=action.device)
+                index = torch.randint(
+                    0, action_dim, action.shape[:-1], device=action.device)
                 action = torch.zeros_like(action)
                 action[..., index] = 1
             return action

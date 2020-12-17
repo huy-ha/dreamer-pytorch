@@ -68,14 +68,16 @@ class RSSMTransition(TransitionBase):
         self._dist = distribution
 
     def _build_rnn_input_model(self):
-        rnn_input_model = [nn.Linear(self._action_size + self._stoch_size, self._hidden_size)]
+        rnn_input_model = [
+            nn.Linear(self._action_size + self._stoch_size, self._hidden_size)]
         rnn_input_model += [self._activation()]
         return nn.Sequential(*rnn_input_model)
 
     def _build_stochastic_model(self):
         stochastic_model = [nn.Linear(self._hidden_size, self._hidden_size)]
         stochastic_model += [self._activation()]
-        stochastic_model += [nn.Linear(self._hidden_size, 2 * self._stoch_size)]
+        stochastic_model += [nn.Linear(self._hidden_size,
+                                       2 * self._stoch_size)]
         return nn.Sequential(*stochastic_model)
 
     def initial_state(self, batch_size, **kwargs):
@@ -87,9 +89,17 @@ class RSSMTransition(TransitionBase):
         )
 
     def forward(self, prev_action: torch.Tensor, prev_state: RSSMState):
-        rnn_input = self._rnn_input_model(torch.cat([prev_action, prev_state.stoch], dim=-1))
+        if len(prev_action.shape) != len(prev_state.stoch.shape):
+            prev_state = RSSMState(
+                mean=prev_state.mean.unsqueeze(dim=0),
+                std=prev_state.std.unsqueeze(dim=0),
+                stoch=prev_state.stoch.unsqueeze(dim=0),
+                deter=prev_state.deter.unsqueeze(dim=0))
+        rnn_input = self._rnn_input_model(
+            torch.cat([prev_action, prev_state.stoch], dim=-1))
         deter_state = self._cell(rnn_input, prev_state.deter)
-        mean, std = torch.chunk(self._stochastic_prior_model(deter_state), 2, dim=-1)
+        mean, std = torch.chunk(
+            self._stochastic_prior_model(deter_state), 2, dim=-1)
         std = tf.softplus(std) + 0.1
         dist = self._dist(mean, std)
         stoch_state = dist.rsample()
@@ -111,9 +121,11 @@ class RSSMRepresentation(RepresentationBase):
         self._stochastic_posterior_model = self._build_stochastic_model()
 
     def _build_stochastic_model(self):
-        stochastic_model = [nn.Linear(self._deter_size + self._obs_embed_size, self._hidden_size)]
+        stochastic_model = [
+            nn.Linear(self._deter_size + self._obs_embed_size, self._hidden_size)]
         stochastic_model += [self._activation()]
-        stochastic_model += [nn.Linear(self._hidden_size, 2 * self._stoch_size)]
+        stochastic_model += [nn.Linear(self._hidden_size,
+                                       2 * self._stoch_size)]
         return nn.Sequential(*stochastic_model)
 
     def initial_state(self, batch_size, **kwargs):
@@ -157,7 +169,8 @@ class RSSMRollout(RollOutModule):
         priors = []
         posteriors = []
         for t in range(steps):
-            prior_state, posterior_state = self.representation_model(obs_embed[t], action[t], prev_state)
+            prior_state, posterior_state = self.representation_model(
+                obs_embed[t], action[t], prev_state)
             priors.append(prior_state)
             posteriors.append(posterior_state)
             prev_state = posterior_state
