@@ -172,27 +172,29 @@ class RandomVideoSource(ImageSource):
                 (self.total_frames, self.shape[0], self.shape[1]) + ((3,) if not self.grayscale else (1,)))
             total_frame_i = 0
             file_i = 0
-            while total_frame_i < self.total_frames:
-                if file_i % len(self.filelist) == 0:
-                    random.shuffle(self.filelist)
-                file_i += 1
-                fname = self.filelist[file_i % len(self.filelist)]
-                if self.grayscale:
-                    frames = skvideo.io.vread(
-                        fname, outputdict={"-pix_fmt": "gray"})
-                else:
-                    frames = skvideo.io.vread(fname)
-                for frame_i in range(frames.shape[0]):
-                    if total_frame_i >= self.total_frames:
-                        break
+            with tqdm.tqdm(total=self.total_frames, desc="Loading videos for distractors") as pbar:
+                while total_frame_i < self.total_frames:
+                    if file_i % len(self.filelist) == 0:
+                        random.shuffle(self.filelist)
+                    file_i += 1
+                    fname = self.filelist[file_i % len(self.filelist)]
                     if self.grayscale:
-                        # THIS IS NOT A BUG! cv2 uses (width, height)
-                        self.arr[total_frame_i] = cv2.resize(
-                            frames[frame_i], (self.shape[1], self.shape[0]))[..., None]
+                        frames = skvideo.io.vread(
+                            fname, outputdict={"-pix_fmt": "gray"})
                     else:
-                        self.arr[total_frame_i] = cv2.resize(
-                            frames[frame_i], (self.shape[1], self.shape[0]))
-                    total_frame_i += 1
+                        frames = skvideo.io.vread(fname)
+                    for frame_i in range(frames.shape[0]):
+                        if total_frame_i >= self.total_frames:
+                            break
+                        if self.grayscale:
+                            # THIS IS NOT A BUG! cv2 uses (width, height)
+                            self.arr[total_frame_i] = cv2.resize(
+                                frames[frame_i], (self.shape[1], self.shape[0]))[..., None]
+                        else:
+                            self.arr[total_frame_i] = cv2.resize(
+                                frames[frame_i], (self.shape[1], self.shape[0]))
+                        pbar.update(1)
+                        total_frame_i += 1
 
     def reset(self):
         self._loc = np.random.randint(0, self.total_frames)
