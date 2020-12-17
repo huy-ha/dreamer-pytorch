@@ -80,11 +80,9 @@ def build_and_eval(output_pickle: str,
     reward = torch.tensor(0.0)
     action = torch.tensor(0.0)
     observations = []
-    next_observations = []
     actions = []
     rewards = []
     dones = []
-    next_observation = []
     agent_infos = []
     infos = []
     with tqdm(total=eval_steps, dynamic_ncols=True, desc='Collecting eval experience') as pbar:
@@ -100,7 +98,6 @@ def build_and_eval(output_pickle: str,
             actions.append(action)
             rewards.append(reward)
             dones.append(done)
-            next_observations.append(next_observation)
             infos.append(info)
             agent_infos.append(agent_step.agent_info)
             prev_action = action
@@ -115,7 +112,6 @@ def build_and_eval(output_pickle: str,
         {
             'obs': observations,
             'action': actions,
-            'next_obs': next_observations,
             'reward': rewards,
             'done': dones,
             'info': infos,
@@ -136,7 +132,7 @@ if __name__ == "__main__":
     parser.add_argument('--img_source', default='video', type=str,
                         choices=['color', 'noise', 'images', 'video', 'none'])
     parser.add_argument('--total_frames', default=25000, type=int)
-    parser.add_argument('--eval_steps', default=100000, type=int)
+    parser.add_argument('--eval_steps', default=10000, type=int)
     parser.add_argument('--cuda-idx',
                         help='gpu to use ',
                         type=int,
