@@ -4,8 +4,8 @@ import pandas as pd
 from matplotlib import pyplot as plt
 import seaborn as sns
 from time import time
+from pandas import DataFrame
 import os
-from tqdm import tqdm
 
 
 def compute_mean_episode_rewards(experience):
@@ -15,54 +15,7 @@ def compute_mean_episode_rewards(experience):
         if done:
             episode_rewards.append(0.0)
     print('Mean Episode Rewards:', np.mean(episode_rewards))
-
-
-def order_distance(a, b):
-
-    pairwise_a = np.linalg.norm(a[:, None, :] - a[None, :, :], axis=-1)
-    pairwise_b = np.linalg.norm(b[:, None, :] - b[None, :, :], axis=-1)
-
-    a_args = np.argsort(pairwise_a, axis=1)
-    b_args = np.argsort(pairwise_b, axis=1)
-
-    shape, shape = a_args.shape
-    loss = 0
-    for i in range(shape):
-        a_line = a_args[i]
-        b_line = b_args[i]
-        shape = len(a_line)
-        output = []
-
-        for i in range(shape):
-            elt = a_line[i]
-            new_pos = np.arange(shape)[b_line == elt][0]
-            output.append(new_pos)
-
-        distances = abs(np.arange(shape)-np.array(output))
-        # prob_dist = 1/(np.arange(shape)+1)+1
-        # loss += distances @ prob_dist
-        loss += distances
-
-    return -loss
-
-
-def compute_mutual_info(experience, n_pts=100):
-
-    latent_states = [
-        rssm_state.prev_state.stoch
-        for rssm_state in experience['agent_infos']]
-    ground_truth_states = [
-        step_info.internal_state
-        for step_info in experience['info']
-    ]
-
-    # Note: since latent states is prev state, not curr state
-    # you might want to offset the two arrays by one
-    aligned_latent = np.stack(latent_states[1:])
-    aligned_ground = np.stack(ground_truth_states[:-1])
-    np.random.seed(0)
-    perm = np.random.permutation(aligned_ground.shape[0])[:n_pts]
-    return order_distance(aligned_latent[perm], aligned_ground[perm])
+    return episode_rewards
 
 
 our_pickles = [
@@ -96,35 +49,35 @@ baseline_pickles = [
     (650999, 'pickles/baseline_650999_eval.pkl'),
 ]
 
-
 if __name__ == "__main__":
-
     x = []
     y = []
     algo = []
-    dataframe_path = 'rank_dataframe.pkl'
+    dataframe_path = 'dataframe.pkl'
     if os.path.exists(dataframe_path):
         df = pd.read_pickle(dataframe_path)
     else:
         df = pd.DataFrame()
-        for i, pkl_file in tqdm(our_pickles):
+        for i, pkl_file in our_pickles:
             experience = pickle.load(open(pkl_file, 'rb'))
-            x.append(i)
-            y.append(compute_mutual_info(experience))
-            algo.append('Ours')
-        for i, pkl_file in tqdm(baseline_pickles):
+            for episode_reward in compute_mean_episode_rewards(experience):
+                x.append(i)
+                y.append(episode_reward)
+                algo.append('Ours')
+        for i, pkl_file in baseline_pickles:
             experience = pickle.load(open(pkl_file, 'rb'))
-            x.append(i)
-            y.append(compute_mutual_info(experience))
-            algo.append('Dreamer')
+            for episode_reward in compute_mean_episode_rewards(experience):
+                x.append(i)
+                y.append(episode_reward)
+                algo.append('Dreamer')
         df['Training Iterations'] = np.array(x)
-        df['Y'] = np.array(y)
+        df['Episode Rewards'] = np.array(y)
         df['Algorithm'] = algo
         df.to_pickle(dataframe_path)
     sns.lineplot(
         data=df,
         x="Training Iterations",
-        y="Y",
+        y="Episode Rewards",
         hue="Algorithm"
     )
     plt.grid()

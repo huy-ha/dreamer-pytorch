@@ -1,3 +1,7 @@
+*.png
+*.pdf
+*.pkl
+*.mp4
 logs/
 .vscode/
 # Byte-compiled / optimized / DLL files
